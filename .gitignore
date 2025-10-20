@@ -106,3 +106,4 @@ wandb/
 *.log
 logs/
 data/*
+commands.ipynb
