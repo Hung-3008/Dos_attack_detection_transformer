@@ -164,12 +164,16 @@ def run_classification(num_requests: int = 1000, model_choice: str = "auto") -> 
     rows.append('<thead><tr><th>index</th><th>actual</th><th>predicted</th><th>result</th></tr></thead>')
     rows.append('<tbody>')
     for _, r in df_res.iterrows():
-        color = '#d4edda' if r['correct'] else '#f8d7da'
-        rows.append(f"<tr style='background:{color}'>")
-        rows.append(f"<td>{html.escape(str(r['index']))}</td>")
-        rows.append(f"<td>{html.escape(r['actual_name'])}</td>")
-        rows.append(f"<td>{html.escape(r['predicted_name'])}</td>")
-        rows.append(f"<td>{'OK' if r['correct'] else 'WRONG'}</td>")
+        # use black background for better contrast and a colored left border to indicate correctness
+        if r['correct']:
+            style = "background:#000; color:#fff; border-left:6px solid #28a745;"
+        else:
+            style = "background:#000; color:#fff; border-left:6px solid #dc3545;"
+        rows.append(f"<tr style='{style}'>")
+        rows.append(f"<td style='padding:6px'>{html.escape(str(r['index']))}</td>")
+        rows.append(f"<td style='padding:6px'>{html.escape(r['actual_name'])}</td>")
+        rows.append(f"<td style='padding:6px'>{html.escape(r['predicted_name'])}</td>")
+        rows.append(f"<td style='padding:6px'>{'OK' if r['correct'] else 'WRONG'}</td>")
         rows.append('</tr>')
     rows.append('</tbody></table>')
 
@@ -183,7 +187,44 @@ def demo_interface():
         with gr.Row():
             num = gr.Slider(100, 1000, value=1000, step=100, label="Number of requests to classify")
             model_choice = gr.Dropdown(['auto', 'sklearn', 'transformer'], value='auto', label='Model choice')
-        run_button = gr.Button('Run Demo')
+        # button with elem_id so we can attach a hover tooltip
+        run_button = gr.Button('Run Demo', elem_id='send_request_btn')
+        # tooltip HTML will be injected; preview the first test request for display
+        try:
+            _, df_test = load_data('data/UNSW_NB15_DoS_train_data.csv', 'data/UNSW_NB15_DoS_test_data.csv')
+            preview_row = df_test.iloc[0].to_dict()
+            preview_html = '<pre style="white-space:pre-wrap; color:#fff;">' + html.escape(str(preview_row)) + '</pre>'
+        except Exception:
+            preview_html = '<pre style="color:#fff">No preview available</pre>'
+
+        tooltip_div = gr.HTML(f"""
+        <div id="tooltip_box" style="display:none; position:absolute; z-index:9999; background:#111; color:#fff; padding:12px; border-radius:6px; width:420px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+            <strong>Sample request preview</strong>
+            {preview_html}
+        </div>
+        <script>
+        (function(){{
+            function attachTooltip(){{
+                var btn = document.getElementById('send_request_btn');
+                var tip = document.getElementById('tooltip_box');
+                if (!btn || !tip) return;
+                // position tooltip relative to button
+                btn.addEventListener('mouseenter', function(e){{
+                    var rect = btn.getBoundingClientRect();
+                    tip.style.display = 'block';
+                    tip.style.top = (rect.bottom + window.scrollY + 8) + 'px';
+                    tip.style.left = (rect.left + window.scrollX) + 'px';
+                }});
+                btn.addEventListener('mouseleave', function(e){{ tip.style.display = 'none'; }});
+                btn.addEventListener('focus', function(e){{ tip.style.display = 'block'; }});
+                btn.addEventListener('blur', function(e){{ tip.style.display = 'none'; }});
+            }}
+            // wait for DOM
+            if (document.readyState === 'complete') attachTooltip(); else window.addEventListener('load', attachTooltip);
+        }})();
+        </script>
+        """, elem_id='tooltip_html')
+
         output = gr.HTML()
 
         run_button.click(fn=run_classification, inputs=[num, model_choice], outputs=[output])
