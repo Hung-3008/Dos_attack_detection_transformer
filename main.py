@@ -11,7 +11,9 @@ def main():
     Main function to run the pipeline.
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, default="random_forest", choices=["random_forest", "decision_tree"])
+    parser.add_argument("--model", type=str, default="random_forest", choices=["random_forest", "decision_tree", "transformer"])
+    parser.add_argument("--device", type=str, default="auto", choices=["cpu", "cuda", "auto"], help="Device to run transformer on: cpu, cuda, or auto-detect")
+    parser.add_argument("--epochs", type=int, default=5, help="Number of epochs for transformer training")
     args = parser.parse_args()
 
     model_config = {}
@@ -30,6 +32,18 @@ def main():
             "max_depth": 3,
             "random_state": 42
         }
+    elif args.model == "transformer":
+        # transformer is a PyTorch-based model with its own preprocess + training flow
+        from models import train_transformer as transformer_module
+        model_name = "Transformer"
+        model_config = {
+            "d_model": 128,
+            "num_layers": 2,
+            "n_heads": 4,
+            "batch_size": 256,
+            "epochs": 5,
+            "lr": 3e-4,
+        }
 
     # Initialize wandb
     wandb.init(project="cns-dos-prediction", config={
@@ -45,19 +59,44 @@ def main():
         'data/UNSW_NB15_DoS_test_data.csv'
     )
 
-    # Preprocess data
-    X_train, y_train, X_test, y_test = preprocessor.preprocess_data(
-        df_train, 
-        df_test, 
-        config.FEATURES_TO_KEEP, 
-        config.CATEGORICAL_FEATURES
-    )
+    if args.model == "transformer":
+        # transformer has its own preprocessing and training wrapper
+        # resolve device preference
+        device = args.device
+        if device == "auto":
+            try:
+                import torch
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+            except Exception:
+                device = "cpu"
 
-    # Train model
-    model = model_module.train_model(X_train, y_train)
+        # allow CLI override for epochs
+        epochs = args.epochs if args.epochs is not None else model_config["epochs"]
 
-    # Evaluate model
-    metrics = model_module.evaluate_model(model, X_test, y_test)
+        model, metrics = transformer_module.train_and_evaluate(
+            df_train,
+            df_test,
+            config.FEATURES_TO_KEEP,
+            config.CATEGORICAL_FEATURES,
+            device=device,
+            epochs=epochs,
+            batch_size=model_config["batch_size"],
+            lr=model_config["lr"],
+        )
+    else:
+        # Preprocess data for classical models
+        X_train, y_train, X_test, y_test = preprocessor.preprocess_data(
+            df_train,
+            df_test,
+            config.FEATURES_TO_KEEP,
+            config.CATEGORICAL_FEATURES
+        )
+
+        # Train model
+        model = model_module.train_model(X_train, y_train)
+
+        # Evaluate model
+        metrics = model_module.evaluate_model(model, X_test, y_test)
 
     try:
         # Log metrics

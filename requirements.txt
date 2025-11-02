@@ -4,3 +4,7 @@ numpy
 wandb
 matplotlib
 seaborn
+torch
+tqdm
+gradio
+joblib
