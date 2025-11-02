@@ -215,7 +215,7 @@ def classifier_generator(state: dict, max_requests: int):
 
     # disable the send button while running
     history_html = make_history_table_html(state.get('history', []))
-    yield (history_html, '<div style="color:#fff">Starting...</div>', f"Requests: {state['count']}/{max_requests}", gr.update(interactive=False), state)
+    yield (history_html, '<div style="color:#fff">Starting...</div>', gr.update(interactive=False), state)
 
     while state['count'] < max_requests:
         idx = random.randrange(len(df_test))
@@ -223,10 +223,9 @@ def classifier_generator(state: dict, max_requests: int):
         # current request displayed as a single-line table row
         current_html = make_current_row_html(idx, row)
 
-        status_text = f"Requests: {state['count']}/{max_requests}"
         # show current request immediately (history stays same)
         history_html = make_history_table_html(state.get('history', []))
-        yield (history_html, current_html, status_text, gr.update(interactive=False), state)
+        yield (history_html, current_html, gr.update(interactive=False), state)
 
         # run model
         t0 = time.time()
@@ -270,8 +269,7 @@ def classifier_generator(state: dict, max_requests: int):
         history_html = make_history_table_html(state.get('history', []))
 
         # clear current request display (so it disappears) and show updated history
-        status_text = f"Requests: {state['count']}/{max_requests} — last: {elapsed:.3f}s — avg: {state['total_time']/state['count']:.4f}s"
-        yield (history_html, '', status_text, gr.update(interactive=False), state)
+        yield (history_html, '', gr.update(interactive=False), state)
 
         # 1 second delay between requests
         time.sleep(1)
@@ -279,7 +277,7 @@ def classifier_generator(state: dict, max_requests: int):
     # done, show summary and keep button disabled
     summary = make_summary_html(state)
     history_html = make_history_table_html(state.get('history', []))
-    yield (history_html, summary, f"Completed: {state['count']}/{max_requests}", gr.update(interactive=False), state)
+    yield (history_html, summary, gr.update(interactive=False), state)
 
 
 def build_app():
@@ -289,15 +287,16 @@ def build_app():
             with gr.Column():
                 send_btn = gr.Button("Send Request", elem_id='send_req_btn')
                 max_requests = gr.Number(value=1000, label="Max requests (global limit)", precision=0)
+                current_request_display = gr.HTML('<div style="color:#fff">Current Request: None</div>')
             detail_out = gr.HTML('<div style="color:#fff">Request detail will appear here</div>')
             result_out = gr.HTML('<div style="color:#fff">Result will appear here</div>')
-        status = gr.Text(value=f"Requests: 0/{max_requests.value if hasattr(max_requests, 'value') else 1000}")
+
 
         # state to keep counts and stats
         state = gr.State({'count': 0, 'start_time': time.time(), 'total_time': 0.0, 'correct': 0})
 
         # wire button: outputs are detail_out, result_out, status, send_btn (to allow disabling), state
-        send_btn.click(classifier_generator, inputs=[state, max_requests], outputs=[detail_out, result_out, status, send_btn, state])
+        send_btn.click(classifier_generator, inputs=[state, max_requests], outputs=[detail_out, result_out, send_btn, state])
 
     return demo
 
