@@ -41,7 +41,7 @@ def main():
             "num_layers": 2,
             "n_heads": 4,
             "batch_size": 256,
-            "epochs": 5,
+            "epochs": 500,
             "lr": 3e-4,
         }
 

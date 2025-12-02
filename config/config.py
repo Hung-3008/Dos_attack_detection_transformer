@@ -18,7 +18,7 @@ FEATURES_TO_KEEP = [
     'ct_src_ltm',
     'sloss',
     'dloss',
-    'synack',
+    'synack', # important
     'tcprtt'
 ]
 

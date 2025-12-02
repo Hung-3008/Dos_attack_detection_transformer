@@ -211,11 +211,15 @@ def classifier_generator(state: dict, max_requests: int):
     state.setdefault('total_time', 0.0)
     state.setdefault('correct', 0)
     state.setdefault('log_html', '')
+    # accumulated current-request log (will be appended to each iteration)
+    state.setdefault('current_request_log_html', '')
     state.setdefault('history', [])
 
     # disable the send button while running
     history_html = make_history_table_html(state.get('history', []))
-    yield (history_html, '<div style="color:#fff">Starting...</div>', gr.update(interactive=False), state)
+    # outputs mapping: detail_out (history_html), current_request_display (accumulated current log),
+    # result_out (starting / final summary), send_btn update, state
+    yield (history_html, state['current_request_log_html'], '<div style="color:#fff">Starting...</div>', gr.update(interactive=False), state)
 
     while state['count'] < max_requests:
         idx = random.randrange(len(df_test))
@@ -225,7 +229,12 @@ def classifier_generator(state: dict, max_requests: int):
 
         # show current request immediately (history stays same)
         history_html = make_history_table_html(state.get('history', []))
-        yield (history_html, current_html, gr.update(interactive=False), state)
+        # append current_html to the accumulated log and send it to the current_request_display;
+        # keep result_out empty during processing
+        state['current_request_log_html'] += current_html
+        yield (history_html, state['current_request_log_html'], '', gr.update(interactive=False), state)
+        # ensure the current request detail stays visible for a short time before running the model
+        time.sleep(0.5)
 
         # run model
         t0 = time.time()
@@ -268,8 +277,9 @@ def classifier_generator(state: dict, max_requests: int):
         state['history'].append({'idx': idx, 'actual': ('DoS' if true_label==1 else 'Normal' if true_label==0 else 'NA'), 'pred': pred_name, 'time': elapsed, 'prob': prob or 0.0, 'result': result_flag})
         history_html = make_history_table_html(state.get('history', []))
 
-        # clear current request display (so it disappears) and show updated history
-        yield (history_html, '', gr.update(interactive=False), state)
+        # show updated history; keep accumulated current-request log visible (do not clear)
+        # keep result_out empty until the final summary
+        yield (history_html, state['current_request_log_html'], '', gr.update(interactive=False), state)
 
         # 1 second delay between requests
         time.sleep(1)
@@ -277,7 +287,8 @@ def classifier_generator(state: dict, max_requests: int):
     # done, show summary and keep button disabled
     summary = make_summary_html(state)
     history_html = make_history_table_html(state.get('history', []))
-    yield (history_html, summary, gr.update(interactive=False), state)
+    # final mapping: history -> detail_out, current (accumulated) -> current_request_display, summary -> result_out
+    yield (history_html, state['current_request_log_html'], summary, gr.update(interactive=False), state)
 
 
 def build_app():
@@ -287,6 +298,7 @@ def build_app():
             with gr.Column():
                 send_btn = gr.Button("Send Request", elem_id='send_req_btn')
                 max_requests = gr.Number(value=1000, label="Max requests (global limit)", precision=0)
+                # new HTML component (displayed in the first column, directly below max_requests)
                 current_request_display = gr.HTML('<div style="color:#fff">Current Request: None</div>')
             detail_out = gr.HTML('<div style="color:#fff">Request detail will appear here</div>')
             result_out = gr.HTML('<div style="color:#fff">Result will appear here</div>')
@@ -295,8 +307,13 @@ def build_app():
         # state to keep counts and stats
         state = gr.State({'count': 0, 'start_time': time.time(), 'total_time': 0.0, 'correct': 0})
 
-        # wire button: outputs are detail_out, result_out, status, send_btn (to allow disabling), state
-        send_btn.click(classifier_generator, inputs=[state, max_requests], outputs=[detail_out, result_out, send_btn, state])
+        # wire button: outputs are detail_out (history), current_request_display (current request),
+        # result_out (starting message / final summary), send_btn (to allow disabling), state
+        send_btn.click(
+            classifier_generator,
+            inputs=[state, max_requests],
+            outputs=[detail_out, current_request_display, result_out, send_btn, state],
+        )
 
     return demo
 
